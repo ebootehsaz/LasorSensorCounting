@@ -1,0 +1,10 @@
+MacOS is not officially supported by ROS
+
+Add the ROS Noetic tap to Homebrew:
+    - brew tap ros/noetic
+Update Homebrew:
+    - brew update
+Install ROS Noetic:
+    - brew install ros/noetic/noetic
+
+    
