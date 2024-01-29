@@ -1,37 +1,54 @@
-#include "LaserSensorCounter.h"
+#include <algorithm>  //TODO: check that all the includes are needed
+#include <cmath>
+#include <functional>
+#include <memory>
+#include <queue>
+#include <ranges>
+#include <vector>
 
-LaserSensorCounter::LaserSensorCounter(ros::NodeHandle* nh, int pin) : sensor_pin(pin), counter(0), object_detected(false) {
-    wiringPiSetupGpio(); // Use Broadcom pin numbering
-    pinMode(sensor_pin, INPUT);
-    pullUpDnControl(sensor_pin, PUD_UP); // Enable pull-up resistor
-    counter_pub = nh->advertise<std_msgs::Int32>("laser_sensor_counter", 10);
-}
+#include "constants.hpp"
+#include <rclcpp/rclcpp.hpp>
+#include <std_msgs/msg/int32.hpp>
 
-void LaserSensorCounter::checkSensor() {
-    if (digitalRead(sensor_pin) == LOW) { // LOW when laser is interrupted
-        if (!object_detected) {
-            counter++;
-            std_msgs::Int32 msg;
-            msg.data = counter;
-            counter_pub.publish(msg);
+class LaserSensorCounter : public rclcpp::Node {
+private:
+    int sensor_pin;
+    int counter;
+    bool object_detected;
+    rclcpp::Publisher<std_msgs::msg::Int32>::SharedPtr counter_pub;
+    rclcpp::TimerBase::SharedPtr timer_;
+    int laser_din=sensor_pin;
+
+    void checkSensor() {
+        // A senior programmer needs to verify this if check to check the sensor and update `object_detected` and `counter`
+        if (digitalRead(laser_din)==LOW) {
+            if (!object_detected) {
+                object_detected = true;
+                counter++;
+                if (counter > 4) counter = 4; // Limit the count
+                counter_pub->publish(counter);
+            }
+        } else {
+            object_detected = false;
         }
-        object_detected = true;
-    } else {
-        object_detected = false;
-    }
-}
-
-int main(int argc, char **argv) {
-    ros::init(argc, argv, "laser_sensor_counter");
-    ros::NodeHandle nh;
-    LaserSensorCounter lsc(&nh, 18); // Change the pin number accordingly
-
-    ros::Rate loop_rate(10); // Loop at 10Hz
-    while (ros::ok()) {
-        lsc.checkSensor();
-        ros::spinOnce();
-        loop_rate.sleep();
     }
 
+public:
+    LaserSensorCounter(int sensor_pin) : Node("laser_sensor_counter"), sensor_pin(sensor_pin), counter(0), object_detected(false) {
+        counter_pub = this->create_publisher<std_msgs::msg::Int32>("laser_sensor_count", 10);
+        timer_ = this->create_wall_timer(500ms, std::bind(&LaserSensorCounter::checkSensor, this));
+    }
+
+    void resetCounter() {
+        counter = 0;
+        counter_pub->publish(counter);
+    }
+};
+
+int main(int argc, char * argv[]) {
+    rclcpp::init(argc, argv);
+    // auto node = std::make_shared<LaserSensorCounter>();
+    rclcpp::spin(node);
+    rclcpp::shutdown();
     return 0;
 }
